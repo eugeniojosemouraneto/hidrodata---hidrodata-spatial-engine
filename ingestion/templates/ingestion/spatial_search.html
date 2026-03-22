@@ -1,0 +1,432 @@
+{% extends 'global/base.html' %}
+
+{% block content %}
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+
+<style>
+    /* Estilos para o Carrossel Horizontal de Cards */
+    .carousel-container {
+        display: flex;
+        overflow-x: auto;
+        gap: 1rem;
+        padding-bottom: 1rem;
+        scroll-snap-type: x mandatory;
+    }
+    .carousel-card {
+        min-width: 280px;
+        scroll-snap-align: start;
+        border-left: 4px solid #0d6efd;
+    }
+    /* Estilização da barra de rolagem do carrossel */
+    .carousel-container::-webkit-scrollbar { height: 8px; }
+    .carousel-container::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+    .carousel-container::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    .carousel-container::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+</style>
+
+<div class="container mt-5 mb-5" style="background-color: transparent;">
+    <h2 class="mb-4 text-primary">⚙️ Motor de Busca Espacial por Quadrantes</h2>
+    
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-danger alert-dismissible fade show shadow-sm" role="alert">
+                <strong>Atenção:</strong> {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <div class="row">
+        <div class="col-md-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-dark text-white">Parâmetros de Busca</div>
+                <div class="card-body">
+                    <form method="POST" id="search-form">
+                        {% csrf_token %}
+                        {% for field in form %}
+                            <div class="mb-3">
+                                <label for="{{ field.id_for_label }}" class="form-label fw-bold text-dark mb-1">{{ field.label }}</label>
+                                {{ field }}
+                                {% if field.help_text %}
+                                    <div class="form-text text-muted mt-1"><small>💡 {{ field.help_text }}</small></div>
+                                {% endif %}
+                                {% for error in field.errors %}
+                                    <div class="text-danger small mt-1">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                        {% endfor %}
+                        <button type="submit" id="btn-submit" class="btn btn-primary w-100 mt-2 fw-bold">Executar Busca PostGIS</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-8">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-dark text-white">Seletor de Coordenadas Visuais</div>
+                <div class="card-body p-2">
+                    <div id="map" style="height: 450px; width: 100%; border-radius: 8px; border: 2px solid #dee2e6; z-index: 1;"></div>
+                    <small class="text-muted mt-2 d-block text-center">👆 <b>Dica:</b> Clique em qualquer lugar do mapa para preencher a Latitude e Longitude automaticamente.</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if results is not None %}
+    <div class="row mt-5">
+        <div class="col-12">
+            <h4 class="mb-3 text-success border-bottom pb-2">
+                Estações Encontradas: {{ results|length }}
+                {% if target_altitude is not None %}
+                    <small class="text-muted fs-6 ms-3">| 🎯 Altitude do Alvo: {{ target_altitude|floatformat:2 }} m</small>
+                {% endif %}
+            </h4>
+            
+            {% if results %}
+            
+            <div class="table-responsive shadow-sm mb-5">
+                <table class="table table-hover table-bordered bg-white align-middle mb-0 text-center">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Código</th>
+                            <th>Nome</th>
+                            <th>
+                                Altitude 
+                                <i class="bi bi-info-circle ms-1 text-info" style="cursor: help;" data-bs-toggle="tooltip" data-bs-placement="top" title="Elevação absoluta da estação em relação ao nível do mar (metros)."></i>
+                            </th>
+                            <th>
+                                Δ Altitude 
+                                <i class="bi bi-info-circle ms-1 text-info" style="cursor: help;" data-bs-toggle="tooltip" data-bs-placement="top" title="Diferença de altura (Delta H) entre a estação e o seu ponto alvo. Valores positivos indicam que a estação está em um terreno mais alto."></i>
+                            </th>
+                            <th>
+                                Distância (PostGIS) 
+                                <i class="bi bi-info-circle ms-1 text-info" style="cursor: help;" data-bs-toggle="tooltip" data-bs-placement="top" title="Distância linear reta calculada nativamente pelo banco de dados geográfico."></i>
+                            </th>
+                            <th>
+                                Azimute 
+                                <i class="bi bi-info-circle ms-1 text-info" style="cursor: help;" data-bs-toggle="tooltip" data-bs-placement="top" title="Ângulo de direção (0° a 360°) da estação em relação ao alvo, baseado no Norte Verdadeiro."></i>
+                            </th>
+                            <th>
+                                Vetor 
+                                <i class="bi bi-info-circle ms-1 text-info" style="cursor: help;" data-bs-toggle="tooltip" data-bs-placement="top" title="Representação visual para onde a 'frente de tempestade' precisaria se deslocar da estação para atingir o alvo."></i>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for station in results %}
+                        <tr>
+                            <td><strong>{{ station.code }}</strong></td>
+                            <td class="text-start">{{ station.name }}</td>
+                            <td>{% if station.altitude %}{{ station.altitude|floatformat:2 }} m{% else %}<span class="text-muted">N/A</span>{% endif %}</td>
+                            <td>
+                                {% if station.delta_h is not None %}
+                                    {% if station.delta_h > 0 %}
+                                        <span class="text-primary fw-bold">▲ +{{ station.delta_h|floatformat:2 }} m</span>
+                                    {% elif station.delta_h < 0 %}
+                                        <span class="text-danger fw-bold">▼ {{ station.delta_h|floatformat:2 }} m</span>
+                                    {% else %}
+                                        <span class="text-muted fw-bold">0 m</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="text-muted">N/A</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-danger fw-bold">{{ station.distance_to_reference.km|floatformat:2 }} km</td>
+                            
+                            <td>
+                                {% if station.azimuth_degrees != None %}
+                                    {{ station.azimuth_degrees|floatformat:1 }}°
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+
+                            <td>
+                                {% if station.azimuth_degrees != None %}
+                                    <div style="transform: rotate({{ station.azimuth_degrees }}deg); font-size: 1.5rem; color: #0d6efd; line-height: 1;" 
+                                         title="Direção em relação ao ponto de busca">
+                                        ↑
+                                    </div>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <h5 class="mb-3 text-secondary">Análise Detalhada das Estações</h5>
+            <div class="carousel-container">
+                <div class="accordion shadow-sm mt-5 mb-4" id="glossaryAccordion">
+                    <div class="accordion-item border-primary">
+                        <h2 class="accordion-header" id="headingGlossary">
+                            <button class="accordion-button collapsed fw-bold text-primary" type="button" data-bs-toggle="collapse" data-bs-target="#collapseGlossary" aria-expanded="false" aria-controls="collapseGlossary">
+                                <i class="bi bi-journal-text me-2"></i> Entenda os Cálculos Espaciais e Topográficos
+                            </button>
+                        </h2>
+                        <div id="collapseGlossary" class="accordion-collapse collapse" aria-labelledby="headingGlossary" data-bs-parent="#glossaryAccordion">
+                            <div class="accordion-body bg-light">
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <h6 class="fw-bold"><i class="bi bi-rulers text-danger"></i> Distância Linear (PostGIS)</h6>
+                                        <p class="small text-muted text-justify">Calculada utilizando a projeção elipsoidal da Terra no banco de dados geográfico (SRID 4326). Representa a menor distância em linha reta entre o alvo pesquisado e a estação meteorológica instalada.</p>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <h6 class="fw-bold"><i class="bi bi-compass text-primary"></i> Azimute (Direção Angular)</h6>
+                                        <p class="small text-muted text-justify">O Azimute é uma medida de direção expressa em graus (0° a 360°). 0° aponta para o Norte, 90° para o Leste, 180° para o Sul e 270° para o Oeste. É essencial para modelos de <em>advecção</em> (deslocamento de massas de ar e chuvas).</p>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <h6 class="fw-bold"><i class="bi bi-mountain text-success"></i> Altitude e Δ Altitude (Delta H)</h6>
+                                        <p class="small text-muted text-justify">A Altitude é a elevação absoluta do terreno. O <strong>Δ Altitude</strong> é o diferencial orográfico. Se chove em uma estação muito mais baixa que o seu alvo, a massa de ar pode perder umidade (efeito orográfico) ao tentar subir a montanha em direção ao alvo.</p>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <h6 class="fw-bold"><i class="bi bi-arrow-up-right-circle text-info"></i> Vetor de Deslocamento</h6>
+                                        <p class="small text-muted text-justify">A bússola vetorial traduz o Azimute em um indicativo visual rápido. Ajuda o cientista a identificar visualmente o quadrante de onde a informação climática está vindo.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% for station in results %}
+                <div class="card carousel-card shadow-sm flex-shrink-0">
+                    <div class="card-body d-flex flex-column">
+                        <h5 class="card-title text-primary">{{ station.code }}</h5>
+                        <h6 class="card-subtitle mb-2 text-muted text-truncate" title="{{ station.name }}">{{ station.name }}</h6>
+                        <p class="card-text small mb-3"><strong>Estado:</strong> {{ station.state }}</p>
+                        <button type="button" class="btn btn-outline-primary btn-sm mt-auto" data-bs-toggle="modal" data-bs-target="#modal-{{ station.code }}">
+                            Mais Detalhes
+                        </button>
+                    </div>
+                </div>
+
+                <div class="modal fade" id="modal-{{ station.code }}" tabindex="-1" aria-labelledby="modalLabel-{{ station.code }}" aria-hidden="true" data-station-code="{{ station.code }}" data-lat="{{ station.latitude|stringformat:"f" }}" data-lng="{{ station.longitude|stringformat:"f" }}">
+                    <div class="modal-dialog modal-xl modal-dialog-centered">
+                        <div class="modal-content">
+                            <div class="modal-header bg-primary text-white">
+                                <h5 class="modal-title" id="modalLabel-{{ station.code }}">Estação: {{ station.name }} ({{ station.code }})</h5>
+                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body bg-light">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="card shadow-sm h-100">
+                                            <div class="card-header bg-secondary text-white fw-bold">Metadados Oficiais</div>
+                                            <div class="card-body">
+                                                <ul class="list-group list-group-flush small">
+                                                    <li class="list-group-item">
+                                                        <div class="row">
+                                                            <div class="col-6"><strong>Código:</strong> {{ station.code }}</div>
+                                                            <div class="col-6"><strong>Tipo:</strong> {{ station.station_type|default:"N/A" }}</div>
+                                                        </div>
+                                                    </li>
+                                                    <li class="list-group-item"><strong>Nome:</strong> {{ station.name }}</li>
+                                                    <li class="list-group-item"><strong>Bacia:</strong> {{ station.basin|default:"N/A" }}</li>
+                                                    <li class="list-group-item"><strong>Estado / Cidade:</strong> {{ station.state|default:"N/A" }} / {{ station.city|default:"N/A" }}</li>
+                                                    <li class="list-group-item">
+                                                        <div class="row">
+                                                            <div class="col-12"><strong>Coordenadas:</strong> {{ station.latitude|stringformat:"f" }}, {{ station.longitude|stringformat:"f" }}</div>
+                                                        </div>
+                                                    </li>
+                                                    <li class="list-group-item">
+                                                        <div class="row">
+                                                            <div class="col-6"><strong>Altitude:</strong> {% if station.altitude %}{{ station.altitude|floatformat:2 }} m{% else %}<span class="text-muted">N/A</span>{% endif %}</div>
+                                                            <div class="col-6"><strong>Δ Altitude:</strong> 
+                                                                {% if station.delta_h is not None %}
+                                                                    {% if station.delta_h > 0 %}<span class="text-primary fw-bold">▲ +{{ station.delta_h|floatformat:2 }} m</span>
+                                                                    {% elif station.delta_h < 0 %}<span class="text-danger fw-bold">▼ {{ station.delta_h|floatformat:2 }} m</span>
+                                                                    {% else %}0 m{% endif %}
+                                                                {% else %}<span class="text-muted">N/A</span>{% endif %}
+                                                            </div>
+                                                        </div>
+                                                    </li>
+                                                    <li class="list-group-item">
+                                                        <div class="row">
+                                                            <div class="col-12"><strong>Falhas (ANA):</strong> {% if station.missing_percentage %}{{ station.missing_percentage }}%{% else %}<span class="text-muted">N/A</span>{% endif %}</div>
+                                                        </div>
+                                                    </li>
+                                                    <li class="list-group-item"><strong>Operador:</strong> {{ station.operator|default:"N/A" }}</li>
+                                                    <li class="list-group-item"><strong>Operação:</strong> {{ station.start_date|date:"d/m/Y"|default:"N/A" }} até {{ station.end_date|date:"d/m/Y"|default:"Atual" }}</li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="col-md-6 mt-3 mt-md-0">
+                                        <div class="card shadow-sm h-100">
+                                            <div class="card-header bg-secondary text-white fw-bold">Posição Relativa</div>
+                                            <div class="card-body p-1">
+                                                <div id="map-modal-{{ station.code }}" style="height: 100%; min-height: 350px; width: 100%; border-radius: 4px; z-index: 1;"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar Painel</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            {% else %}
+            <div class="alert alert-warning shadow-sm">Nenhuma estação ativa foi encontrada dentro do raio de busca estipulado.</div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    // 0. Inicializa os Tooltips do Bootstrap
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+    
+    // 1. Efeito de Loading para evitar Double Submit
+    const searchForm = document.getElementById('search-form');
+    if (searchForm) {
+        searchForm.addEventListener('submit', function() {
+            const btn = document.getElementById('btn-submit');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Processando...';
+            document.body.style.cursor = 'wait';
+        });
+    }
+
+    // 2. MAPA PRINCIPAL
+    var mapContainer = document.getElementById('map');
+    if (!mapContainer) return; // Segurança
+
+    var map = L.map('map').setView([-15.7801, -47.9292], 4);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(map);
+
+    var userMarker;
+    var currentLat = document.getElementById('id_latitude').value;
+    var currentLng = document.getElementById('id_longitude').value;
+    var allMarkersCoords = [];
+
+    // Carrega o alvo inicial se existir
+    if (currentLat && currentLng) {
+        var latNum = parseFloat(currentLat.replace(',', '.'));
+        var lngNum = parseFloat(currentLng.replace(',', '.'));
+        if (!isNaN(latNum) && !isNaN(lngNum)) {
+            userMarker = L.marker([latNum, lngNum]).addTo(map).bindPopup("Referência da Busca").openPopup();
+            allMarkersCoords.push([latNum, lngNum]);
+            map.setView([latNum, lngNum], 7);
+        }
+    }
+
+    // Clique no mapa atualiza o form
+    map.on('click', function(e) {
+        var lat = e.latlng.lat.toFixed(6);
+        var lng = e.latlng.lng.toFixed(6);
+        document.getElementById('id_latitude').value = lat;
+        document.getElementById('id_longitude').value = lng;
+        if (userMarker) { map.removeLayer(userMarker); }
+        userMarker = L.marker([lat, lng]).addTo(map).bindPopup("Alvo:<br>" + lat + ", " + lng).openPopup();
+    });
+
+    // Função de enquadramento reutilizável
+    function recalibrateMapZoom(mMap, coords) {
+        if (coords.length > 0) {
+            mMap.fitBounds(new L.LatLngBounds(coords), { padding: [40, 40], maxZoom: 12 }); 
+        }
+    }
+
+    // Controle "Alvo" do Leaflet Refatorado (DRY)
+    var RecalibrateControl = L.Control.extend({
+        options: { position: 'topleft' },
+        initialize: function(targetMap, targetCoords) {
+            this.tMap = targetMap;
+            this.tCoords = targetCoords;
+        },
+        onAdd: function () {
+            var container = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+            container.style.cssText = 'background-color: white; width: 34px; height: 34px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px;';
+            container.title = 'Ajustar zoom para abranger tudo';
+            container.innerHTML = '🎯';
+            container.onclick = (e) => {
+                e.stopPropagation();
+                recalibrateMapZoom(this.tMap, this.tCoords);
+            }
+            return container;
+        }
+    });
+
+    {% if results %}
+        // Declaração única de Ícones
+        var iconBase = { shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] };
+        var stationIconGreen = L.icon(Object.assign({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png'}, iconBase));
+        var stationIconRed = L.icon(Object.assign({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png'}, iconBase));
+
+        // Popula Mapa Principal
+        {% for station in results %}
+            allMarkersCoords.push([{{ station.latitude|stringformat:"f" }}, {{ station.longitude|stringformat:"f" }}]);
+            L.marker([{{ station.latitude|stringformat:"f" }}, {{ station.longitude|stringformat:"f" }}], {icon: stationIconGreen})
+                .addTo(map)
+                .bindPopup("<b>{{ station.name }} ({{ station.code }})</b><br>Distância: {{ station.distance_to_reference.km|floatformat:2 }} km");
+        {% endfor %}
+
+        recalibrateMapZoom(map, allMarkersCoords);
+        map.addControl(new RecalibrateControl(map, allMarkersCoords));
+
+        // 3. MAPAS DOS MODAIS (Lazy Load Otimizado)
+        var modalMaps = {};
+
+        document.querySelectorAll('.modal').forEach(function(modal) {
+            modal.addEventListener('shown.bs.modal', function () {
+                var sCode = modal.getAttribute('data-station-code');
+                var mapContainerId = 'map-modal-' + sCode;
+
+                if (!modalMaps[sCode]) {
+                    var mMap = L.map(mapContainerId);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(mMap);
+
+                    var modalMarkersCoords = [];
+                    if (userMarker) {
+                        var uLat = userMarker.getLatLng().lat;
+                        var uLng = userMarker.getLatLng().lng;
+                        L.marker([uLat, uLng]).addTo(mMap).bindPopup("Sua Referência");
+                        modalMarkersCoords.push([uLat, uLng]);
+                    }
+
+                    {% for s in results %}
+                        var iterCode = "{{ s.code }}";
+                        var iterLat = {{ s.latitude|stringformat:"f" }};
+                        var iterLng = {{ s.longitude|stringformat:"f" }};
+                        var iconToUse = (iterCode === sCode) ? stationIconRed : stationIconGreen;
+                        
+                        var marker = L.marker([iterLat, iterLng], {icon: iconToUse}).addTo(mMap);
+                        modalMarkersCoords.push([iterLat, iterLng]);
+
+                        if (iterCode === sCode) {
+                            marker.bindPopup("<b>Estação Analisada</b>").openPopup();
+                        }
+                    {% endfor %}
+                    
+                    recalibrateMapZoom(mMap, modalMarkersCoords);
+                    mMap.addControl(new RecalibrateControl(mMap, modalMarkersCoords));
+
+                    modalMaps[sCode] = mMap;
+                } else {
+                    // Se já foi renderizado, apenas corrige o erro de tamanho cinza do Leaflet em Modais
+                    modalMaps[sCode].invalidateSize();
+                }
+            });
+        });
+    {% endif %}
+});
+</script>
+{% endblock %}
