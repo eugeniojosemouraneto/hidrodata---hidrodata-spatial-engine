@@ -1,0 +1,23 @@
+# --- Framework e Configurações ---
+Django==6.0.3
+django-environ==0.13.0
+djangorestframework==3.16.1
+
+# --- Banco de Dados e Geoprocessamento ---
+psycopg2-binary==2.9.11
+django-geojson==4.2.0
+django-leaflet==0.33.0
+
+# --- Filas e Assincronismo ---
+celery==5.6.2
+redis==7.3.0
+
+# --- Ciência de Dados e Engenharia ---
+hydrobr==0.1.1
+pandas==3.0.1
+numpy==2.4.3
+pydantic==2.12.5
+
+# --- Ferramentas e Utilitários ---
+requests==2.32.5
+tqdm==4.67.3
