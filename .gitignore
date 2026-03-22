@@ -1,0 +1,41 @@
+# ========================
+# Python & Ambientes Virtuais
+# ========================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+venv/
+env/
+
+# ========================
+# Variáveis de Ambiente & Segurança
+# ========================
+.env
+.env.local
+
+# ========================
+# Django & Banco de Dados Local
+# ========================
+*.log
+db.sqlite3
+db.sqlite3-journal
+media/
+# Ignora a pasta gerada pelo volume do Docker para o PostGIS
+postgis_data/ 
+
+# ========================
+# Celery
+# ========================
+celerybeat-schedule
+celerybeat.pid
+celerybeat-schedule.db
+
+# ========================
+# IDEs (VSCode, PyCharm) & SO
+# ========================
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
