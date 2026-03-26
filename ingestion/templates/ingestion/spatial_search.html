@@ -145,7 +145,7 @@
 
                             <td>
                                 {% if station.azimuth_degrees != None %}
-                                    <div style="transform: rotate({{ station.azimuth_degrees }}deg); font-size: 1.5rem; color: #0d6efd; line-height: 1;" 
+                                    <div style="transform: rotate({{ station.azimuth_degrees|stringformat:'f' }}deg); font-size: 1.5rem; color: #0d6efd; line-height: 1;" 
                                          title="Direção em relação ao ponto de busca">
                                         ↑
                                     </div>
@@ -214,7 +214,7 @@
                             <div class="modal-body bg-light">
                                 <div class="row">
                                     <div class="col-md-6">
-                                        <div class="card shadow-sm h-100">
+                                        <div class="card shadow-sm">
                                             <div class="card-header bg-secondary text-white fw-bold">Metadados Oficiais</div>
                                             <div class="card-body">
                                                 <ul class="list-group list-group-flush small">
@@ -254,13 +254,88 @@
                                                 </ul>
                                             </div>
                                         </div>
+
+                                        <div class="card shadow-sm mt-3 border-info">
+                                            <div class="card-header bg-info text-white fw-bold">
+                                                <i class="bi bi-bounding-box-circles me-1"></i> Corredor Topográfico Ortogonal
+                                            </div>
+                                            <div class="card-body p-0">
+                                                <ul class="list-group list-group-flush small">
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        <span><strong>Largura Dinâmica:</strong></span> 
+                                                        <span class="text-primary">{{ station.corridor_metadata.corridor_width_m|floatformat:2 }} m</span>
+                                                    </li>
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        <span><strong>Distanciamento (Resolução):</strong></span> 
+                                                        <span class="text-success">{{ station.corridor_metadata.step_size_m|floatformat:2 }} m</span>
+                                                    </li>
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        <span><strong>Nós Analisados:</strong></span> 
+                                                        <span class="badge bg-secondary rounded-pill">{{ station.corridor_metadata.quant_coordinates }} pontos</span>
+                                                    </li>
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        <span><strong>Área Total Varredura:</strong></span> 
+                                                        <span class="text-danger fw-bold">{{ station.corridor_metadata.area_total_km2|floatformat:2 }} km²</span>
+                                                    </li>
+                                                </ul>
+                                            </div>
+                                        </div>
                                     </div>
                                     
                                     <div class="col-md-6 mt-3 mt-md-0">
-                                        <div class="card shadow-sm h-100">
+                                        <div class="card shadow-sm">
                                             <div class="card-header bg-secondary text-white fw-bold">Posição Relativa</div>
                                             <div class="card-body p-1">
-                                                <div id="map-modal-{{ station.code }}" style="height: 100%; min-height: 350px; width: 100%; border-radius: 4px; z-index: 1;"></div>
+                                                <div id="map-modal-{{ station.code }}" style="height: 350px; width: 100%; border-radius: 4px; z-index: 1;"></div>
+                                            </div>
+                                        </div>
+
+                                        <div class="card shadow-sm mt-3 border-warning">
+                                            <div class="card-header bg-warning text-dark fw-bold">
+                                                <i class="bi bi-compass me-1"></i> Relação Espacial (Alvo ➔ Estação)
+                                            </div>
+                                            <div class="card-body p-0">
+                                                <ul class="list-group list-group-flush small">
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        <span><strong>Distância Linear (PostGIS):</strong></span> 
+                                                        <span class="text-danger fw-bold">{{ station.distance_to_reference.km|floatformat:2 }} km</span>
+                                                    </li>
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        <span><strong>Azimute (Vetor de Direção):</strong></span> 
+                                                        <span>
+                                                            {% if station.azimuth_degrees != None %}
+                                                                <strong class="text-primary">{{ station.azimuth_degrees|floatformat:1 }}°</strong>
+                                                                <div class="d-inline-block ms-1" style="transform: rotate({{ station.azimuth_degrees|stringformat:'f' }}deg); font-size: 1.1rem; color: #0d6efd; vertical-align: middle;" title="Direção do deslocamento">↑</div>
+                                                            {% else %}
+                                                                <span class="text-muted">N/A</span>
+                                                            {% endif %}
+                                                        </span>
+                                                    </li>
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        <span><strong>Altitude do Ponto Alvo (Referência):</strong></span> 
+                                                        <span class="text-muted">{% if target_altitude is not None %}{{ target_altitude|floatformat:2 }} m{% else %}N/A{% endif %}</span>
+                                                    </li>
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        <span><strong>Altitude da Estação Geográfica:</strong></span> 
+                                                        <span class="text-muted">{% if station.altitude is not None %}{{ station.altitude|floatformat:2 }} m{% else %}N/A{% endif %}</span>
+                                                    </li>
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                        <span><strong>Diferença de Elevação (ΔH):</strong></span> 
+                                                        <span>
+                                                            {% if station.delta_h is not None %}
+                                                                {% if station.delta_h > 0 %}
+                                                                    <span class="text-primary fw-bold">▲ +{{ station.delta_h|floatformat:2 }} m (Subida)</span>
+                                                                {% elif station.delta_h < 0 %}
+                                                                    <span class="text-danger fw-bold">▼ {{ station.delta_h|floatformat:2 }} m (Descida)</span>
+                                                                {% else %}
+                                                                    <span class="fw-bold">0 m (Plano)</span>
+                                                                {% endif %}
+                                                            {% else %}
+                                                                N/A
+                                                            {% endif %}
+                                                        </span>
+                                                    </li>
+                                                </ul>
                                             </div>
                                         </div>
                                     </div>
@@ -377,7 +452,7 @@ document.addEventListener("DOMContentLoaded", function() {
                 .addTo(map)
                 .bindPopup("<b>{{ station.name }} ({{ station.code }})</b><br>Distância: {{ station.distance_to_reference.km|floatformat:2 }} km");
             
-            // --- NOVO: Renderiza o Polígono do Corredor Topográfico ---
+            // Renderiza o Polígono do Corredor Topográfico
             var corridorCoords_{{ station.code }} = {{ station.corridor_polygon_json|safe }};
             
             var polygon_{{ station.code }} = L.polygon(corridorCoords_{{ station.code }}, {
@@ -426,7 +501,7 @@ document.addEventListener("DOMContentLoaded", function() {
                         if (iterCode === sCode) {
                             marker.bindPopup("<b>Estação Analisada</b>").openPopup();
                             
-                            // --- NOVO: Desenha o polígono destacado no modal ---
+                            // Desenha o polígono destacado no modal
                             var modalCorridorCoords = {{ s.corridor_polygon_json|safe }};
                             L.polygon(modalCorridorCoords, {
                                 color: '#e67e22',       // Laranja destaque

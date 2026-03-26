@@ -62,6 +62,9 @@ class SpatialSearchView(View):
 
                     station.corridor_polygon_json = json.dumps(corridor_data["perimeter"])
 
+                    # Acopla os metadados gerados ao objeto station
+                    station.corridor_metadata = corridor_data.get("metadata", {})
+
         else:
             for error in form.non_field_errors():
                 messages.error(request, error)
