@@ -17,7 +17,9 @@ hydrobr==0.1.1
 pandas==3.0.1
 numpy==2.4.3
 pydantic==2.12.5
+pyproj==3.6.1
 
 # --- Ferramentas e Utilitários ---
 requests==2.32.5
 tqdm==4.67.3
+aiohttp==3.9.3
