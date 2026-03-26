@@ -371,12 +371,24 @@ document.addEventListener("DOMContentLoaded", function() {
         var stationIconGreen = L.icon(Object.assign({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png'}, iconBase));
         var stationIconRed = L.icon(Object.assign({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png'}, iconBase));
 
-        // Popula Mapa Principal
         {% for station in results %}
             allMarkersCoords.push([{{ station.latitude|stringformat:"f" }}, {{ station.longitude|stringformat:"f" }}]);
             L.marker([{{ station.latitude|stringformat:"f" }}, {{ station.longitude|stringformat:"f" }}], {icon: stationIconGreen})
                 .addTo(map)
                 .bindPopup("<b>{{ station.name }} ({{ station.code }})</b><br>Distância: {{ station.distance_to_reference.km|floatformat:2 }} km");
+            
+            // --- NOVO: Renderiza o Polígono do Corredor Topográfico ---
+            var corridorCoords_{{ station.code }} = {{ station.corridor_polygon_json|safe }};
+            
+            var polygon_{{ station.code }} = L.polygon(corridorCoords_{{ station.code }}, {
+                color: '#2c3e50',      // Borda escura clássica
+                weight: 1.5,
+                fillColor: '#3498db',  // Azul científico translúcido
+                fillOpacity: 0.15      // Baixa opacidade para focar no relevo de fundo
+            }).addTo(map);
+            
+            // Adiciona as bordas do polígono na câmera para o zoom ficar perfeito
+            corridorCoords_{{ station.code }}.forEach(coord => allMarkersCoords.push(coord));
         {% endfor %}
 
         recalibrateMapZoom(map, allMarkersCoords);
@@ -413,6 +425,18 @@ document.addEventListener("DOMContentLoaded", function() {
 
                         if (iterCode === sCode) {
                             marker.bindPopup("<b>Estação Analisada</b>").openPopup();
+                            
+                            // --- NOVO: Desenha o polígono destacado no modal ---
+                            var modalCorridorCoords = {{ s.corridor_polygon_json|safe }};
+                            L.polygon(modalCorridorCoords, {
+                                color: '#e67e22',       // Laranja destaque
+                                weight: 2,
+                                fillColor: '#e67e22',
+                                fillOpacity: 0.25
+                            }).addTo(mMap);
+                            
+                            // Ajusta o zoom do modal para abarcar todo o corredor do trajeto
+                            modalCorridorCoords.forEach(coord => modalMarkersCoords.push(coord));
                         }
                     {% endfor %}
                     

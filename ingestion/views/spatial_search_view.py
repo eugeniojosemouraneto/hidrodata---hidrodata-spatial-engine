@@ -1,9 +1,11 @@
+import json
+
 from django.shortcuts import render
 from django.views import View
 from django.contrib import messages
 
 from ingestion.forms import SpatialSearchForm
-from ingestion.services import SpatialSearchService, ElevationSearchService
+from ingestion.services import SpatialSearchService, ElevationSearchService, TopographicCorridorService
 
 
 class SpatialSearchView(View):
@@ -49,6 +51,16 @@ class SpatialSearchView(View):
 
                     else:
                         station.delta_h = None
+
+                    corridor_data = TopographicCorridorService.generate_swath_profile_mesh(
+                        target_latitude=latitude,
+                        target_longitude=longitude,
+                        station_latitude=station.latitude,
+                        station_longitude=station.longitude,
+                        precision_mode='economic'
+                    )
+
+                    station.corridor_polygon_json = json.dumps(corridor_data["perimeter"])
 
         else:
             for error in form.non_field_errors():
